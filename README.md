@@ -1,5 +1,5 @@
 # SwarmPY
-Web UI for Docker Swarm, written in Python.
+Web API UI for Docker Swarm, written in Python.
 
 ## Audience
 
@@ -20,3 +20,7 @@ A no-authentication web service which must be behind your load balancer.
 ## What it is not
 
 A container manager. There are million versions on the Internet.
+
+# API documentation
+
+Start your server, then visit http://IP:8080/docs
