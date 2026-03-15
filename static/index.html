@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<!-- vim: set ft=html ts=2 sw=2 et: -->
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SwarmPY</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-dark px-4 py-2 border-bottom border-secondary">
+    <span class="navbar-brand mb-0 brand">
+      <i class="bi bi-diagram-3-fill text-info me-2"></i>SwarmPY
+    </span>
+    <span class="ms-auto d-flex align-items-center gap-2 small text-secondary">
+      <span :class="['status-dot', connected ? 'bg-success' : 'bg-danger']"></span>
+      {{ connected ? 'connected' : 'unreachable' }}
+    </span>
+  </nav>
+
+  <!-- Tabs -->
+  <ul class="nav nav-tabs px-4 pt-2 border-bottom border-secondary">
+    <li class="nav-item">
+      <a class="nav-link" :class="{active: tab==='stacks'}" href="#" @click.prevent="switchTab('stacks')">
+        <i class="bi bi-stack me-1"></i>Stacks
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" :class="{active: tab==='services'}" href="#" @click.prevent="switchTab('services')">
+        <i class="bi bi-gear-wide-connected me-1"></i>Services
+      </a>
+    </li>
+  </ul>
+
+  <div class="container-fluid py-4 px-4">
+
+    <!-- ── STACKS ── -->
+    <div v-if="tab==='stacks'">
+      <div class="d-flex align-items-center mb-3">
+        <h5 class="mb-0 fw-bold">Stacks</h5>
+        <button class="btn btn-sm btn-outline-secondary ms-auto" @click="loadStacks">
+          <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+        </button>
+      </div>
+
+      <div v-if="stacks.loading" class="text-center text-secondary py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading…
+      </div>
+      <div v-else-if="stacks.error" class="alert alert-danger">{{ stacks.error }}</div>
+      <div v-else-if="!stacks.data.length" class="text-secondary text-center py-5">No stacks found.</div>
+      <div v-else class="table-responsive">
+        <table class="table table-dark table-hover align-middle">
+          <thead class="table-secondary">
+            <tr>
+              <th>Name</th>
+              <th>Services</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="s in stacks.data" :key="s.name">
+              <td class="fw-semibold">{{ s.name }}</td>
+              <td><span class="badge bg-info text-dark">{{ s.services }}</span></td>
+              <td>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-sm btn-outline-info" @click="showStackServices(s.name)">
+                    <i class="bi bi-list-ul me-1"></i>Services
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger" @click="confirmDeleteStack(s.name)">
+                    <i class="bi bi-trash me-1"></i>Delete
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── SERVICES ── -->
+    <div v-if="tab==='services'">
+      <div class="d-flex align-items-center mb-3">
+        <h5 class="mb-0 fw-bold">Services</h5>
+        <button class="btn btn-sm btn-outline-secondary ms-auto" @click="loadServices">
+          <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+        </button>
+      </div>
+
+      <div v-if="services.loading" class="text-center text-secondary py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading…
+      </div>
+      <div v-else-if="services.error" class="alert alert-danger">{{ services.error }}</div>
+      <div v-else-if="!services.data.length" class="text-secondary text-center py-5">No services found.</div>
+      <div v-else class="table-responsive">
+        <table class="table table-dark table-hover align-middle">
+          <thead class="table-secondary">
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Mode</th>
+              <th>Replicas</th>
+              <th>Image</th>
+              <th>Ports</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="s in services.data" :key="s.id">
+              <td><code class="text-info">{{ s.id }}</code></td>
+              <td class="fw-semibold">{{ s.name }}</td>
+              <td><span class="badge bg-secondary">{{ s.mode }}</span></td>
+              <td>
+                <replica-bar :replicas="s.replicas"></replica-bar>
+              </td>
+              <td><small class="text-secondary">{{ s.image }}</small></td>
+              <td>
+                <span v-if="!s.ports.length" class="text-secondary">—</span>
+                <span v-for="p in s.ports" :key="p" class="badge bg-dark border border-secondary me-1">{{ p }}</span>
+              </td>
+              <td>
+                <div class="d-flex gap-1 flex-wrap">
+                  <button class="btn btn-sm btn-outline-info"    @click="showServiceTasks(s.name)"><i class="bi bi-list-task"></i></button>
+                  <button class="btn btn-sm btn-outline-primary" @click="openScale(s.name, s.replicas.desired)"><i class="bi bi-arrows-expand-vertical"></i></button>
+                  <button class="btn btn-sm btn-outline-primary" @click="openUpdate(s.name)"><i class="bi bi-arrow-up-circle"></i></button>
+                  <button class="btn btn-sm btn-outline-warning" @click="doRollback(s.name)"><i class="bi bi-arrow-counterclockwise"></i></button>
+                  <button class="btn btn-sm btn-outline-danger"  @click="confirmDeleteService(s.name)"><i class="bi bi-trash"></i></button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /container -->
+
+  <!-- ── MODALS ── -->
+
+  <!-- Stack services -->
+  <div class="modal fade" id="modalStackServices" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-content bg-dark">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title">Stack: <span class="text-info">{{ modal.stackName }}</span></h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div v-if="modal.stackServices.loading" class="text-center text-secondary py-3">
+            <div class="spinner-border spinner-border-sm me-2"></div>Loading…
+          </div>
+          <div v-else-if="modal.stackServices.error" class="alert alert-danger">{{ modal.stackServices.error }}</div>
+          <div v-else class="table-responsive">
+            <table class="table table-dark table-sm align-middle">
+              <thead class="table-secondary">
+                <tr><th>ID</th><th>Name</th><th>Mode</th><th>Replicas</th><th>Image</th><th>Ports</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="s in modal.stackServices.data" :key="s.id">
+                  <td><code class="text-info">{{ s.id }}</code></td>
+                  <td>{{ s.name }}</td>
+                  <td><span class="badge bg-secondary">{{ s.mode }}</span></td>
+                  <td><replica-bar :replicas="s.replicas"></replica-bar></td>
+                  <td><small class="text-secondary">{{ s.image }}</small></td>
+                  <td>
+                    <span v-if="!s.ports.length" class="text-secondary">—</span>
+                    <span v-for="p in s.ports" :key="p" class="badge bg-dark border border-secondary me-1">{{ p }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete stack -->
+  <div class="modal fade" id="modalDeleteStack" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content bg-dark">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title">Delete stack?</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body text-secondary">
+          All services in <strong class="text-danger">{{ modal.stackName }}</strong> will be removed.
+        </div>
+        <div class="modal-footer border-secondary">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger" @click="deleteStack">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Service tasks -->
+  <div class="modal fade" id="modalServiceTasks" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-content bg-dark">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title">Tasks: <span class="text-info">{{ modal.serviceName }}</span></h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div v-if="modal.tasks.loading" class="text-center text-secondary py-3">
+            <div class="spinner-border spinner-border-sm me-2"></div>Loading…
+          </div>
+          <div v-else-if="modal.tasks.error" class="alert alert-danger">{{ modal.tasks.error }}</div>
+          <div v-else class="table-responsive">
+            <table class="table table-dark table-sm align-middle">
+              <thead class="table-secondary">
+                <tr><th>ID</th><th>Name</th><th>Node</th><th>Image</th><th>Desired</th><th>State</th><th>Info</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="t in modal.tasks.data" :key="t.id">
+                  <td><code class="text-info">{{ t.id }}</code></td>
+                  <td>{{ t.name }}</td>
+                  <td>{{ t.node }}</td>
+                  <td><small class="text-secondary">{{ t.image }}</small></td>
+                  <td><span class="badge bg-secondary">{{ t.desired_state }}</span></td>
+                  <td><span :class="['badge', taskStateBadge(t.current_state)]">{{ t.current_state }}</span></td>
+                  <td><small class="text-secondary">{{ t.error || t.message || '—' }}</small></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scale -->
+  <div class="modal fade" id="modalScale" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content bg-dark">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title">Scale service</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label text-secondary small">Service</label>
+            <input class="form-control form-control-sm bg-dark text-light border-secondary" :value="modal.serviceName" readonly>
+          </div>
+          <div class="mb-3">
+            <label class="form-label text-secondary small">Replicas</label>
+            <input class="form-control form-control-sm bg-dark text-light border-secondary"
+                   type="number" min="0" v-model.number="modal.scaleNum">
+          </div>
+        </div>
+        <div class="modal-footer border-secondary">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" @click="doScale">Scale</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Update image -->
+  <div class="modal fade" id="modalUpdate" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content bg-dark">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title">Update service</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label text-secondary small">Service</label>
+            <input class="form-control form-control-sm bg-dark text-light border-secondary" :value="modal.serviceName" readonly>
+          </div>
+          <div class="mb-3">
+            <label class="form-label text-secondary small">
+              New image tag <span class="text-muted">(leave blank to force-redeploy same image)</span>
+            </label>
+            <input class="form-control form-control-sm bg-dark text-light border-secondary"
+                   v-model="modal.updateImage" placeholder="e.g. nginx:1.27">
+          </div>
+        </div>
+        <div class="modal-footer border-secondary">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" @click="doUpdate">Update</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete service -->
+  <div class="modal fade" id="modalDeleteService" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content bg-dark">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title">Delete service?</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body text-secondary">
+          Service <strong class="text-danger">{{ modal.serviceName }}</strong> will be removed.
+        </div>
+        <div class="modal-footer border-secondary">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger" @click="deleteService">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:1100">
+    <div v-for="t in toasts" :key="t.id"
+         class="toast show align-items-center border-0"
+         :class="'text-bg-' + t.type">
+      <div class="d-flex">
+        <div class="toast-body small">{{ t.msg }}</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" @click="removeToast(t.id)"></button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /#app -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vue@3.4.21/dist/vue.global.prod.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
