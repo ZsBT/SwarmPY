@@ -1,5 +1,5 @@
 # SwarmPY
-Web API UI for Docker Swarm, written in Python.
+Web API for Docker Swarm, written in Python. It also servers a minimalist GUI.
 
 ## Audience
 
@@ -23,4 +23,8 @@ A container manager. There are million versions on the Internet.
 
 # API documentation
 
-Start your server, then visit http://IP:8080/docs
+Start your container:
+
+`docker run -it --rm --name swarmpit  -v /var/run/docker.sock:/var/run/docker.sock -p 8080:8080 ghcr.io/zsbt/swarmpy:main`
+
+Then visit http://IP:8080/docs
