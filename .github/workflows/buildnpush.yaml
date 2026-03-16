@@ -45,11 +45,7 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: |
-            org.opencontainers.image.created=$(date -Iminutes)
-            org.opencontainers.image.title=SwarmPY
-            org.opencontainers.image.description="Swarm API and GUI"
-
+          labels: ${{ steps.meta.outputs.labels }}
 
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v3
