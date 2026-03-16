@@ -121,6 +121,22 @@ body {
   min-width: 260px;
 }
 
+/* ── Sortable headers ── */
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+th.sortable:hover {
+  color: #c9d1d9;
+}
+
+th.sortable i {
+  font-size: 0.7rem;
+  vertical-align: middle;
+}
+
 /* ── Code ── */
 code {
   font-size: 0.8rem;

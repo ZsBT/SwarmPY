@@ -1,10 +1,9 @@
 // vim: set ft=javascript ts=2 sw=2 et:
 'use strict';
 
-const { createApp, ref, reactive, onMounted } = Vue;
+const { createApp, ref, reactive, computed, onMounted } = Vue;
 
 // ── Config ───────────────────────────────────────────────────────────────────
-// Override by setting window.SWARM_API_BASE before this script loads.
 const API_BASE = (window.SWARM_API_BASE || '').replace(/\/$/, '');
 
 // ── API helper ───────────────────────────────────────────────────────────────
@@ -21,19 +20,34 @@ async function api(method, path, body = null, contentType = 'application/json') 
   return data;
 }
 
-// ── ReplicaBar component ─────────────────────────────────────────────────────
+// ── Sort helper ───────────────────────────────────────────────────────────────
+function makeSorter(key, dir) {
+  return (a, b) => {
+    let av = a[key], bv = b[key];
+    // For replicas objects sort by running count
+    if (av && typeof av === 'object') av = av.running ?? av.current ?? 0;
+    if (bv && typeof bv === 'object') bv = bv.running ?? bv.current ?? 0;
+    if (typeof av === 'string') av = av.toLowerCase();
+    if (typeof bv === 'string') bv = bv.toLowerCase();
+    if (av < bv) return dir === 'asc' ? -1 :  1;
+    if (av > bv) return dir === 'asc' ?  1 : -1;
+    return 0;
+  };
+}
+
+// ── ReplicaBar component ──────────────────────────────────────────────────────
 const ReplicaBar = {
   props: ['replicas'],
   computed: {
     desired() { return this.replicas?.desired ?? this.replicas?.expected ?? 0; },
     running() { return this.replicas?.running ?? this.replicas?.current  ?? 0; },
-    pct()     {
+    pct() {
       if (!this.desired) return 0;
       return Math.min(100, Math.round((this.running / this.desired) * 100));
     },
     fillClass() {
-      if (this.running === 0)              return 'zero';
-      if (this.running < this.desired)     return 'partial';
+      if (this.running === 0)          return 'zero';
+      if (this.running < this.desired) return 'partial';
       return 'full';
     },
   },
@@ -46,7 +60,7 @@ const ReplicaBar = {
     </div>`,
 };
 
-// ── Main app ─────────────────────────────────────────────────────────────────
+// ── Main app ──────────────────────────────────────────────────────────────────
 createApp({
   components: { ReplicaBar },
 
@@ -54,9 +68,40 @@ createApp({
     const tab       = ref('stacks');
     const connected = ref(false);
 
-    // ── Reactive data stores ──
+    // ── Data stores ──
     const stacks   = reactive({ loading: false, error: null, data: [] });
     const services = reactive({ loading: false, error: null, data: [] });
+
+    // ── Sort state per table ──
+    const stacksSort        = reactive({ key: 'name', dir: 'asc' });
+    const servicesSort      = reactive({ key: 'name', dir: 'asc' }); // default: name asc
+    const stackServicesSort = reactive({ key: 'name', dir: 'asc' });
+
+    function toggleSort(sortState, key) {
+      if (sortState.key === key) {
+        sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortState.key = key;
+        sortState.dir = 'asc';
+      }
+    }
+
+    function sortIcon(sortState, key) {
+      if (sortState.key !== key) return 'bi-chevron-expand text-secondary';
+      return sortState.dir === 'asc' ? 'bi-chevron-up text-info' : 'bi-chevron-down text-info';
+    }
+
+    const sortedStacks = computed(() =>
+      [...stacks.data].sort(makeSorter(stacksSort.key, stacksSort.dir))
+    );
+
+    const sortedServices = computed(() =>
+      [...services.data].sort(makeSorter(servicesSort.key, servicesSort.dir))
+    );
+
+    const sortedStackServices = computed(() =>
+      [...modal.stackServices.data].sort(makeSorter(stackServicesSort.key, stackServicesSort.dir))
+    );
 
     // ── Modal state ──
     const modal = reactive({
@@ -69,8 +114,8 @@ createApp({
     });
 
     // ── Toasts ──
-    const toasts  = ref([]);
-    let toastSeq  = 0;
+    const toasts = ref([]);
+    let toastSeq = 0;
 
     function toast(msg, type = 'secondary') {
       const id = ++toastSeq;
@@ -81,19 +126,21 @@ createApp({
       toasts.value = toasts.value.filter(t => t.id !== id);
     }
 
-    // ── Bootstrap modal helpers ──
-    function bsModal(id)      { return bootstrap.Modal.getOrCreateInstance(document.getElementById(id)); }
-    function openModal(id)    { bsModal(id).show(); }
-    function closeModal(id)   { bsModal(id).hide(); }
+    // ── Bootstrap helpers ──
+    function bsModal(id)    { return bootstrap.Modal.getOrCreateInstance(document.getElementById(id)); }
+    function openModal(id)  { bsModal(id).show(); }
+    function closeModal(id) { bsModal(id).hide(); }
+
+    function initTooltips() {
+      document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+        bootstrap.Tooltip.getOrCreateInstance(el, { trigger: 'hover', placement: 'top' });
+      });
+    }
 
     // ── Connection check ──
     async function checkConnection() {
-      try {
-        await api('GET', '/stack');
-        connected.value = true;
-      } catch {
-        connected.value = false;
-      }
+      try { await api('GET', '/stack'); connected.value = true; }
+      catch { connected.value = false; }
     }
 
     // ── Tab switching ──
@@ -103,17 +150,13 @@ createApp({
       if (name === 'services') loadServices();
     }
 
-    // ── STACKS ──────────────────────────────────────────────────────────────
+    // ── STACKS ───────────────────────────────────────────────────────────────
 
     async function loadStacks() {
       stacks.loading = true; stacks.error = null;
-      try {
-        stacks.data = await api('GET', '/stack');
-      } catch (e) {
-        stacks.error = e.message;
-      } finally {
-        stacks.loading = false;
-      }
+      try   { stacks.data = await api('GET', '/stack'); }
+      catch (e) { stacks.error = e.message; }
+      finally   { stacks.loading = false; setTimeout(initTooltips, 100); }
     }
 
     async function showStackServices(name) {
@@ -122,13 +165,9 @@ createApp({
       modal.stackServices.error   = null;
       modal.stackServices.data    = [];
       openModal('modalStackServices');
-      try {
-        modal.stackServices.data = await api('GET', `/stack/${name}`);
-      } catch (e) {
-        modal.stackServices.error = e.message;
-      } finally {
-        modal.stackServices.loading = false;
-      }
+      try   { modal.stackServices.data = await api('GET', `/stack/${name}`); }
+      catch (e) { modal.stackServices.error = e.message; }
+      finally   { modal.stackServices.loading = false; setTimeout(initTooltips, 100); }
     }
 
     function confirmDeleteStack(name) {
@@ -142,22 +181,16 @@ createApp({
         toast(`Stack "${modal.stackName}" deleted (${r.removed?.length ?? 0} services removed)`, 'success');
         closeModal('modalDeleteStack');
         loadStacks();
-      } catch (e) {
-        toast(e.message, 'danger');
-      }
+      } catch (e) { toast(e.message, 'danger'); }
     }
 
-    // ── SERVICES ────────────────────────────────────────────────────────────
+    // ── SERVICES ─────────────────────────────────────────────────────────────
 
     async function loadServices() {
       services.loading = true; services.error = null;
-      try {
-        services.data = await api('GET', '/service');
-      } catch (e) {
-        services.error = e.message;
-      } finally {
-        services.loading = false;
-      }
+      try   { services.data = await api('GET', '/service'); }
+      catch (e) { services.error = e.message; }
+      finally   { services.loading = false; setTimeout(initTooltips, 100); }
     }
 
     async function showServiceTasks(name) {
@@ -166,13 +199,9 @@ createApp({
       modal.tasks.error   = null;
       modal.tasks.data    = [];
       openModal('modalServiceTasks');
-      try {
-        modal.tasks.data = await api('GET', `/service/${name}`);
-      } catch (e) {
-        modal.tasks.error = e.message;
-      } finally {
-        modal.tasks.loading = false;
-      }
+      try   { modal.tasks.data = await api('GET', `/service/${name}`); }
+      catch (e) { modal.tasks.error = e.message; }
+      finally   { modal.tasks.loading = false; }
     }
 
     function openScale(name, desired) {
@@ -189,9 +218,7 @@ createApp({
         toast(`"${modal.serviceName}" scaled to ${num}`, 'success');
         closeModal('modalScale');
         loadServices();
-      } catch (e) {
-        toast(e.message, 'danger');
-      }
+      } catch (e) { toast(e.message, 'danger'); }
     }
 
     function openUpdate(name) {
@@ -207,9 +234,7 @@ createApp({
         toast(`"${modal.serviceName}" update triggered`, 'success');
         closeModal('modalUpdate');
         loadServices();
-      } catch (e) {
-        toast(e.message, 'danger');
-      }
+      } catch (e) { toast(e.message, 'danger'); }
     }
 
     async function doRollback(name) {
@@ -217,9 +242,7 @@ createApp({
         await api('POST', `/service/${name}/rollback`);
         toast(`"${name}" rolled back`, 'warning');
         loadServices();
-      } catch (e) {
-        toast(e.message, 'danger');
-      }
+      } catch (e) { toast(e.message, 'danger'); }
     }
 
     function confirmDeleteService(name) {
@@ -233,24 +256,18 @@ createApp({
         toast(`Service "${modal.serviceName}" deleted`, 'success');
         closeModal('modalDeleteService');
         loadServices();
-      } catch (e) {
-        toast(e.message, 'danger');
-      }
+      } catch (e) { toast(e.message, 'danger'); }
     }
 
-    // ── Task state badge helper ──
+    // ── Task state badge ──
     function taskStateBadge(state) {
       if (!state) return 'bg-secondary';
       switch (state.toLowerCase()) {
-        case 'running':              return 'bg-success';
-        case 'failed':
-        case 'rejected':             return 'bg-danger';
-        case 'starting':
-        case 'preparing':
-        case 'pending':              return 'bg-primary';
-        case 'shutdown':
-        case 'complete':             return 'bg-secondary';
-        default:                     return 'bg-secondary';
+        case 'running':                      return 'bg-success';
+        case 'failed': case 'rejected':      return 'bg-danger';
+        case 'starting': case 'preparing':
+        case 'pending':                      return 'bg-primary';
+        default:                             return 'bg-secondary';
       }
     }
 
@@ -263,6 +280,9 @@ createApp({
     return {
       tab, connected,
       stacks, services, modal, toasts,
+      stacksSort, servicesSort, stackServicesSort,
+      sortedStacks, sortedServices, sortedStackServices,
+      toggleSort, sortIcon,
       switchTab,
       loadStacks, showStackServices, confirmDeleteStack, deleteStack,
       loadServices, showServiceTasks,

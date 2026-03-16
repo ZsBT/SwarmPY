@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SwarmPY</title>
+  <title>SwarmUI</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="app.css">
@@ -16,7 +16,7 @@
   <!-- Navbar -->
   <nav class="navbar navbar-dark px-4 py-2 border-bottom border-secondary">
     <span class="navbar-brand mb-0 brand">
-      <i class="bi bi-diagram-3-fill text-info me-2"></i>SwarmPY
+      <i class="bi bi-diagram-3-fill text-info me-2"></i>SwarmUI
     </span>
     <span class="ms-auto d-flex align-items-center gap-2 small text-secondary">
       <span :class="['status-dot', connected ? 'bg-success' : 'bg-danger']"></span>
@@ -44,7 +44,8 @@
     <div v-if="tab==='stacks'">
       <div class="d-flex align-items-center mb-3">
         <h5 class="mb-0 fw-bold">Stacks</h5>
-        <button class="btn btn-sm btn-outline-secondary ms-auto" @click="loadStacks">
+        <button class="btn btn-sm btn-outline-secondary ms-auto" @click="loadStacks"
+                data-bs-toggle="tooltip" title="Reload stack list">
           <i class="bi bi-arrow-clockwise me-1"></i>Refresh
         </button>
       </div>
@@ -58,21 +59,27 @@
         <table class="table table-dark table-hover align-middle">
           <thead class="table-secondary">
             <tr>
-              <th>Name</th>
-              <th>Services</th>
+              <th class="sortable" @click="toggleSort(stacksSort, 'name')">
+                Name <i :class="['bi', sortIcon(stacksSort, 'name')]"></i>
+              </th>
+              <th class="sortable" @click="toggleSort(stacksSort, 'services')">
+                Services <i :class="['bi', sortIcon(stacksSort, 'services')]"></i>
+              </th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in stacks.data" :key="s.name">
+            <tr v-for="s in sortedStacks" :key="s.name">
               <td class="fw-semibold">{{ s.name }}</td>
               <td><span class="badge bg-info text-dark">{{ s.services }}</span></td>
               <td>
                 <div class="d-flex gap-2">
-                  <button class="btn btn-sm btn-outline-info" @click="showStackServices(s.name)">
+                  <button class="btn btn-sm btn-outline-info" @click="showStackServices(s.name)"
+                          data-bs-toggle="tooltip" title="List services in this stack">
                     <i class="bi bi-list-ul me-1"></i>Services
                   </button>
-                  <button class="btn btn-sm btn-outline-danger" @click="confirmDeleteStack(s.name)">
+                  <button class="btn btn-sm btn-outline-danger" @click="confirmDeleteStack(s.name)"
+                          data-bs-toggle="tooltip" title="Remove all services in this stack">
                     <i class="bi bi-trash me-1"></i>Delete
                   </button>
                 </div>
@@ -87,7 +94,8 @@
     <div v-if="tab==='services'">
       <div class="d-flex align-items-center mb-3">
         <h5 class="mb-0 fw-bold">Services</h5>
-        <button class="btn btn-sm btn-outline-secondary ms-auto" @click="loadServices">
+        <button class="btn btn-sm btn-outline-secondary ms-auto" @click="loadServices"
+                data-bs-toggle="tooltip" title="Reload service list">
           <i class="bi bi-arrow-clockwise me-1"></i>Refresh
         </button>
       </div>
@@ -101,23 +109,31 @@
         <table class="table table-dark table-hover align-middle">
           <thead class="table-secondary">
             <tr>
-              <th>ID</th>
-              <th>Name</th>
-              <th>Mode</th>
-              <th>Replicas</th>
-              <th>Image</th>
+              <th class="sortable" @click="toggleSort(servicesSort, 'id')">
+                ID <i :class="['bi', sortIcon(servicesSort, 'id')]"></i>
+              </th>
+              <th class="sortable" @click="toggleSort(servicesSort, 'name')">
+                Name <i :class="['bi', sortIcon(servicesSort, 'name')]"></i>
+              </th>
+              <th class="sortable" @click="toggleSort(servicesSort, 'mode')">
+                Mode <i :class="['bi', sortIcon(servicesSort, 'mode')]"></i>
+              </th>
+              <th class="sortable" @click="toggleSort(servicesSort, 'replicas')">
+                Replicas <i :class="['bi', sortIcon(servicesSort, 'replicas')]"></i>
+              </th>
+              <th class="sortable" @click="toggleSort(servicesSort, 'image')">
+                Image <i :class="['bi', sortIcon(servicesSort, 'image')]"></i>
+              </th>
               <th>Ports</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in services.data" :key="s.id">
+            <tr v-for="s in sortedServices" :key="s.id">
               <td><code class="text-info">{{ s.id }}</code></td>
               <td class="fw-semibold">{{ s.name }}</td>
               <td><span class="badge bg-secondary">{{ s.mode }}</span></td>
-              <td>
-                <replica-bar :replicas="s.replicas"></replica-bar>
-              </td>
+              <td><replica-bar :replicas="s.replicas"></replica-bar></td>
               <td><small class="text-secondary">{{ s.image }}</small></td>
               <td>
                 <span v-if="!s.ports.length" class="text-secondary">—</span>
@@ -125,11 +141,26 @@
               </td>
               <td>
                 <div class="d-flex gap-1 flex-wrap">
-                  <button class="btn btn-sm btn-outline-info"    @click="showServiceTasks(s.name)"><i class="bi bi-list-task"></i></button>
-                  <button class="btn btn-sm btn-outline-primary" @click="openScale(s.name, s.replicas.desired)"><i class="bi bi-arrows-expand-vertical"></i></button>
-                  <button class="btn btn-sm btn-outline-primary" @click="openUpdate(s.name)"><i class="bi bi-arrow-up-circle"></i></button>
-                  <button class="btn btn-sm btn-outline-warning" @click="doRollback(s.name)"><i class="bi bi-arrow-counterclockwise"></i></button>
-                  <button class="btn btn-sm btn-outline-danger"  @click="confirmDeleteService(s.name)"><i class="bi bi-trash"></i></button>
+                  <button class="btn btn-sm btn-outline-info"    @click="showServiceTasks(s.name)"
+                          data-bs-toggle="tooltip" title="Show running tasks (docker service ps)">
+                    <i class="bi bi-list-task"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-primary" @click="openScale(s.name, s.replicas.desired)"
+                          data-bs-toggle="tooltip" title="Scale replicas">
+                    <i class="bi bi-arrows-expand-vertical"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-primary" @click="openUpdate(s.name)"
+                          data-bs-toggle="tooltip" title="Force update / change image tag">
+                    <i class="bi bi-arrow-up-circle"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-warning" @click="doRollback(s.name)"
+                          data-bs-toggle="tooltip" title="Rollback to previous spec">
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger"  @click="confirmDeleteService(s.name)"
+                          data-bs-toggle="tooltip" title="Remove service">
+                    <i class="bi bi-trash"></i>
+                  </button>
                 </div>
               </td>
             </tr>
@@ -158,10 +189,28 @@
           <div v-else class="table-responsive">
             <table class="table table-dark table-sm align-middle">
               <thead class="table-secondary">
-                <tr><th>ID</th><th>Name</th><th>Mode</th><th>Replicas</th><th>Image</th><th>Ports</th></tr>
+                <tr>
+                  <th class="sortable" @click="toggleSort(stackServicesSort, 'id')">
+                    ID <i :class="['bi', sortIcon(stackServicesSort, 'id')]"></i>
+                  </th>
+                  <th class="sortable" @click="toggleSort(stackServicesSort, 'name')">
+                    Name <i :class="['bi', sortIcon(stackServicesSort, 'name')]"></i>
+                  </th>
+                  <th class="sortable" @click="toggleSort(stackServicesSort, 'mode')">
+                    Mode <i :class="['bi', sortIcon(stackServicesSort, 'mode')]"></i>
+                  </th>
+                  <th class="sortable" @click="toggleSort(stackServicesSort, 'replicas')">
+                    Replicas <i :class="['bi', sortIcon(stackServicesSort, 'replicas')]"></i>
+                  </th>
+                  <th class="sortable" @click="toggleSort(stackServicesSort, 'image')">
+                    Image <i :class="['bi', sortIcon(stackServicesSort, 'image')]"></i>
+                  </th>
+                  <th>Ports</th>
+                  <th>Actions</th>
+                </tr>
               </thead>
               <tbody>
-                <tr v-for="s in modal.stackServices.data" :key="s.id">
+                <tr v-for="s in sortedStackServices" :key="s.id">
                   <td><code class="text-info">{{ s.id }}</code></td>
                   <td>{{ s.name }}</td>
                   <td><span class="badge bg-secondary">{{ s.mode }}</span></td>
@@ -171,10 +220,37 @@
                     <span v-if="!s.ports.length" class="text-secondary">—</span>
                     <span v-for="p in s.ports" :key="p" class="badge bg-dark border border-secondary me-1">{{ p }}</span>
                   </td>
+                  <td>
+                    <div class="d-flex gap-1 flex-wrap">
+                      <button class="btn btn-sm btn-outline-info"    @click="showServiceTasks(s.name)"
+                              data-bs-toggle="tooltip" title="Show running tasks">
+                        <i class="bi bi-list-task"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-primary" @click="openScale(s.name, s.replicas.desired)"
+                              data-bs-toggle="tooltip" title="Scale replicas">
+                        <i class="bi bi-arrows-expand-vertical"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-primary" @click="openUpdate(s.name)"
+                              data-bs-toggle="tooltip" title="Force update / change image tag">
+                        <i class="bi bi-arrow-up-circle"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-warning" @click="doRollback(s.name)"
+                              data-bs-toggle="tooltip" title="Rollback to previous spec">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger"  @click="confirmDeleteService(s.name)"
+                              data-bs-toggle="tooltip" title="Remove service">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
+        </div>
+        <div class="modal-footer border-secondary">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
         </div>
       </div>
     </div>
@@ -322,6 +398,14 @@
     </div>
   </div>
 
+  <nav class="navbar navbar-dark px-4 py-2 border-bottom border-secondary">
+    <span class="ms-auto d-flex align-items-center gap-2 small text-secondary">
+      <a target="api" href="/docs">API docs</a>
+    </span>
+    <span class="ms-auto d-flex align-items-center gap-2 small text-secondary">
+      <a target="github" href="https://github.com/ZsBT/SwarmPY">Project Page</a>
+    </span>
+  </nav>
 </div><!-- /#app -->
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
