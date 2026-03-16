@@ -142,7 +142,7 @@
               <td>
                 <div class="d-flex gap-1 flex-wrap">
                   <button class="btn btn-sm btn-outline-info"    @click="showServiceTasks(s.name)"
-                          data-bs-toggle="tooltip" title="Show running tasks (docker service ps)">
+                          data-bs-toggle="tooltip" title="Show running tasks ">
                     <i class="bi bi-list-task"></i>
                   </button>
                   <button class="btn btn-sm btn-outline-primary" @click="openScale(s.name, s.replicas.desired)"
@@ -153,8 +153,12 @@
                           data-bs-toggle="tooltip" title="Force update / change image tag">
                     <i class="bi bi-arrow-up-circle"></i>
                   </button>
+									<button class="btn btn-sm btn-outline-success" @click="doPull(s.name)"
+													data-bs-toggle="tooltip" title="Force pull and redeploy ">
+										<i class="bi bi-cloud-download"></i>
+									</button>
                   <button class="btn btn-sm btn-outline-warning" @click="doRollback(s.name)"
-                          data-bs-toggle="tooltip" title="Rollback to previous spec">
+                          data-bs-toggle="tooltip" title="Rollback ">
                     <i class="bi bi-arrow-counterclockwise"></i>
                   </button>
                   <button class="btn btn-sm btn-outline-danger"  @click="confirmDeleteService(s.name)"
@@ -231,11 +235,15 @@
                         <i class="bi bi-arrows-expand-vertical"></i>
                       </button>
                       <button class="btn btn-sm btn-outline-primary" @click="openUpdate(s.name)"
-                              data-bs-toggle="tooltip" title="Force update / change image tag">
+                              data-bs-toggle="tooltip" title="Update / change image tag">
                         <i class="bi bi-arrow-up-circle"></i>
                       </button>
+											<button class="btn btn-sm btn-outline-success" @click="doPull(s.name)"
+															data-bs-toggle="tooltip" title="Force pull and redeploy ">
+												<i class="bi bi-cloud-download"></i>
+											</button>
                       <button class="btn btn-sm btn-outline-warning" @click="doRollback(s.name)"
-                              data-bs-toggle="tooltip" title="Rollback to previous spec">
+                              data-bs-toggle="tooltip" title="Rollback ">
                         <i class="bi bi-arrow-counterclockwise"></i>
                       </button>
                       <button class="btn btn-sm btn-outline-danger"  @click="confirmDeleteService(s.name)"
@@ -291,18 +299,19 @@
           <div v-else class="table-responsive">
             <table class="table table-dark table-sm align-middle">
               <thead class="table-secondary">
-                <tr><th>ID</th><th>Name</th><th>Node</th><th>Image</th><th>Desired</th><th>State</th><th>Info</th></tr>
+                <tr><th>ID</th><th>Name</th><th>Node</th><th>Image</th><th>Desired</th><th>State</th><th>Timestamp</th><th>Info</th></tr>
               </thead>
               <tbody>
-                <tr v-for="t in modal.tasks.data" :key="t.id">
-                  <td><code class="text-info">{{ t.id }}</code></td>
-                  <td>{{ t.name }}</td>
-                  <td>{{ t.node }}</td>
-                  <td><small class="text-secondary">{{ t.image }}</small></td>
-                  <td><span class="badge bg-secondary">{{ t.desired_state }}</span></td>
-                  <td><span :class="['badge', taskStateBadge(t.current_state)]">{{ t.current_state }}</span></td>
-                  <td><small class="text-secondary">{{ t.error || t.message || '—' }}</small></td>
-                </tr>
+<tr v-for="t in modal.tasks.data" :key="t.id">
+  <td><code class="text-info">{{ t.id }}</code></td>
+  <td>{{ t.name }}</td>
+  <td>{{ t.node }}</td>
+  <td><small class="text-secondary">{{ t.image }}</small></td>
+  <td><span class="badge bg-secondary">{{ t.desired_state }}</span></td>
+  <td><span :class="['badge', taskStateBadge(t.current_state)]">{{ t.current_state }}</span></td>
+  <td><small class="text-secondary">{{ t.timestamp ? new Date(t.timestamp).toLocaleString() : '—' }}</small></td>
+  <td><small class="text-secondary">{{ t.error || t.message || '—' }}</small></td>
+</tr>
               </tbody>
             </table>
           </div>

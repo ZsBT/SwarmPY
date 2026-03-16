@@ -265,6 +265,7 @@ class ServiceService:
                     "current_state": current_state,
                     "message": status.get("Message", ""),
                     "error": status.get("Err", ""),
+                    "timestamp": status.get("Timestamp", ""),
                 })
 
         return result
@@ -328,12 +329,62 @@ class ServiceService:
             kwargs = {"force_update": True}
             if image:
                 kwargs["image"] = image
-            svc.update(**kwargs)
+                svc.update(**kwargs)
+            else:
+                self.force_pull_update(name_or_id)
         except DockerException as e:
             raise HTTPException(status_code=500, detail=str(e))
 
         return {"updated": svc.name, "id": svc.short_id, "image": image or "unchanged"}
 
+
+    def force_pull_update(self, name_or_id: str) -> dict:
+        """
+        Pulls the current image from the registry to resolve the latest digest,
+        then updates the service pinned to that digest — forcing all nodes to pull.
+        """
+        try:
+            svc = self._client.services.get(name_or_id)
+        except docker.errors.NotFound:
+            raise HTTPException(status_code=404, detail=f"Service '{name_or_id}' not found")
+        except DockerException as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+        image_str = (
+            svc.attrs.get("Spec", {})
+               .get("TaskTemplate", {})
+               .get("ContainerSpec", {})
+               .get("Image", "")
+               .split("@")[0]   # strip any existing digest
+        )
+        if not image_str:
+            raise HTTPException(status_code=500, detail="Could not determine service image")
+
+        # Split name and tag
+        tag   = "latest"
+        image = image_str
+        if ":" in image_str.split("/")[-1]:
+            image, tag = image_str.rsplit(":", 1)
+
+        try:
+            pulled = self._client.images.pull(image, tag=tag)
+        except DockerException as e:
+            raise HTTPException(status_code=500, detail=f"Pull failed: {e}")
+
+        digests = pulled.attrs.get("RepoDigests", [])
+        if not digests:
+            raise HTTPException(status_code=500, detail="No repo digest returned after pull")
+
+        # digests[0] is "image@sha256:..."  — use as-is but restore original tag prefix
+        digest = digests[0].split("@")[1]
+        pinned = f"{image}:{tag}@{digest}"
+
+        try:
+            svc.update(image=pinned)
+        except DockerException as e:
+            raise HTTPException(status_code=500, detail=f"Service update failed: {e}")
+
+        return {"service": svc.name, "image": pinned, "digest": digest}
 
     def scale_service(self, name_or_id: str, num: int) -> dict:
         """
@@ -419,6 +470,9 @@ class ServiceUpdateRequest(BaseModel):
 def update_service(name_or_id: str, body: ServiceUpdateRequest = Body(default=ServiceUpdateRequest())):
     return _service_service.update_service(name_or_id, body.image)
 
+@app.post("/service/{name_or_id}/pull")
+def force_pull_update(name_or_id: str):
+    return _service_service.force_pull_update(name_or_id)
 
 from fastapi import Path
 

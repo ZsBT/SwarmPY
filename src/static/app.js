@@ -199,7 +199,10 @@ createApp({
       modal.tasks.error   = null;
       modal.tasks.data    = [];
       openModal('modalServiceTasks');
-      try   { modal.tasks.data = await api('GET', `/service/${name}`); }
+      try   { 
+        modal.tasks.data = (await api('GET', `/service/${name}`))
+          .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+      }
       catch (e) { modal.tasks.error = e.message; }
       finally   { modal.tasks.loading = false; }
     }
@@ -226,6 +229,14 @@ createApp({
       modal.updateImage = '';
       openModal('modalUpdate');
     }
+
+		async function doPull(name) {
+			try {
+				const r = await api('POST', `/service/${name}/pull`);
+				toast(`"${name}" redeployed with ${r.digest.slice(0, 19)}…`, 'success');
+				loadServices();
+			} catch (e) { toast(e.message, 'danger'); }
+		}
 
     async function doUpdate() {
       const image = modal.updateImage.trim() || null;
@@ -275,6 +286,12 @@ createApp({
     onMounted(() => {
       checkConnection();
       loadStacks();
+
+      setInterval(() => {
+        if (tab.value === 'stacks')   loadStacks();
+        if (tab.value === 'services') loadServices();
+      }, 60_000);
+
     });
 
     return {
@@ -288,6 +305,7 @@ createApp({
       loadServices, showServiceTasks,
       openScale, doScale,
       openUpdate, doUpdate,
+      doPull,
       doRollback,
       confirmDeleteService, deleteService,
       taskStateBadge, removeToast,
